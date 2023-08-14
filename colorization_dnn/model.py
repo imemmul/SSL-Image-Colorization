@@ -1,11 +1,24 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        super(FeatureExtractor, self).__init__()
+        self.base = torchvision.models.efficientnet_b0(weights=torchvision.models.EfficientNet_B0_Weights.DEFAULT)
+        self.feature_extractor = nn.Sequential(*list(self.base.children())[:-2])  # Remove last layers
+
+    def forward(self, x):
+        features = self.feature_extractor(x)
+        return features
+
+
 
 class Encoder(nn.Module):
     def __init__(self, in_channels):
         super(Encoder, self).__init__()
-        self.base = torch.hub.load('pytorch/vision', 'efficientnet_b0', pretrained=True)
+        self.base = FeatureExtractor()
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=2, padding=1)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)
@@ -14,10 +27,11 @@ class Encoder(nn.Module):
         self.conv6 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
         self.conv7 = nn.Conv2d(512, 256, kernel_size=3, stride=2, padding=1)
         self.dropout = nn.Dropout2d(0.25)
-        self.fusion = nn.Conv2d(768, 512, kernel_size=1, padding=0)
+        self.channel_adjustment = nn.Conv2d(256, 1280, kernel_size=1)
+        self.fusion = nn.Conv2d(2560, 1280, kernel_size=1)
         
     def forward(self, inputs):
-        out_base = self.base.extract_features(inputs)
+        out_base = self.base(inputs)
         x = F.leaky_relu(self.conv1(inputs))
         x = F.leaky_relu(self.conv2(x))
         x = F.relu(self.conv3(x))
@@ -27,28 +41,36 @@ class Encoder(nn.Module):
         res_skip_2 = F.relu(self.conv6(x))
         x = res_skip_2
         x = F.relu(self.conv7(x))
-        f = self.fusion(torch.cat([out_base, x], dim=1))
+        x_adjusted = self.channel_adjustment(x)
+        print(f"feature extractor out: {out_base.shape}")
+        print(f"enc out: {x_adjusted.shape}")
+        f = self.fusion(torch.cat((out_base, x_adjusted), dim=1))
         skip_f = torch.cat([f, x], dim=1)
         return skip_f, self.dropout(res_skip_1), self.dropout(res_skip_2)
 
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.convt1 = nn.ConvTranspose2d(768, 512, kernel_size=3, stride=2, padding=1)
+        self.convt1 = nn.ConvTranspose2d(1536, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
         self.dropout = nn.Dropout2d(0.25)
-        self.convt2 = nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1)
-        self.convt3 = nn.ConvTranspose2d(384, 128, kernel_size=3, stride=2, padding=1)
-        self.convt4 = nn.ConvTranspose2d(192, 64, kernel_size=3, stride=2, padding=1)
+        self.convt2 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
+        self.convt3 = nn.ConvTranspose2d(768, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
+        self.convt4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2, padding=1)   # Adjust kernel_size
         self.convt5 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1)
-        self.output_layer = nn.Conv2d(32, 2, kernel_size=1)
+        self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)    # Adjust kernel_size
+        self.output_layer = nn.Conv2d(32, 2, kernel_size=3, padding=1)  # Adjust kernel_size
         
     def forward(self, skip_f, res_skip_1, res_skip_2):
         dec = F.relu(self.convt1(skip_f))
         dec = self.dropout(dec)
-        dec = F.relu(self.convt2(torch.cat([dec, res_skip_2], dim=1)))
+        
+        res_skip_2_resized = F.interpolate(res_skip_2, size=dec.size()[2:], mode='nearest')
+        print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_2_resized.shape}")  # Print shapes for debugging
+        dec = F.relu(self.convt2(torch.cat((dec, res_skip_2_resized), dim=1)))
         dec = self.dropout(dec)
-        dec = F.relu(self.convt3(torch.cat([dec, res_skip_1], dim=1)))
+        res_skip_1_resized = F.interpolate(res_skip_1, size=dec.size()[2:], mode='nearest')
+        print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_1_resized.shape}")
+        dec = F.relu(self.convt3(torch.cat((dec, res_skip_1_resized), dim=1)))
         dec = self.dropout(dec)
         dec = F.relu(self.convt4(dec))
         dec = self.dropout(dec)
@@ -65,3 +87,12 @@ class Colorization_Model(nn.Module):
     def forward(self, inputs):
         skip_f, dropout_res_skip_1, dropout_res_skip_2 = self.encoder(inputs)
         return self.decoder(skip_f, dropout_res_skip_1, dropout_res_skip_2)
+
+from torchsummary import summary
+if __name__ == "__main__":
+    model = FeatureExtractor()
+    enc = Encoder(in_channels=3)
+    model.to("cuda")
+    enc.to("cuda")
+    # summary(model=model, input_size=(3, 224,224), batch_size=32, device="cuda")
+    summary(model=enc, input_size=(3, 224,224), batch_size=32, device="cuda")

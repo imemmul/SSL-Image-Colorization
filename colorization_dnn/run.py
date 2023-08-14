@@ -4,12 +4,14 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
+from torchsummary import summary
 
 dataset_ab = '/home/emir/Desktop/dev/myResearch/dataset/colorization_lab.npy'
 dataset_gray = '/home/emir/Desktop/dev/myResearch/dataset/l/gray_scale.npy'
 
+device = "cuda"
 
-def train(model, train_loader, val_loader, epochs, batch_size):
+def train(model, train_loader, val_loader, epochs):
     print("Training starting")
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0003)
@@ -41,7 +43,6 @@ def train(model, train_loader, val_loader, epochs, batch_size):
     torch.save(model.state_dict(), 'colorization_weights.pth')
 
 def run():
-    model = Colorization_Model(in_channels=1)  # Assuming input is grayscale
     
     gray = np.load(dataset_gray)
     ab = np.load(dataset_ab)
@@ -49,22 +50,22 @@ def run():
     train_out = ab[:1500]
     
     train_in = np.repeat(train_in[..., np.newaxis], 3, -1)
-    x = torch.FloatTensor(train_in.transpose(0, 3, 1, 2))  # NHWC to NCHW
-    y = torch.FloatTensor(train_out.transpose(0, 3, 1, 2))
-    
+    x = torch.FloatTensor(train_in.transpose(0, 3, 1, 2)).to(device)  # NHWC to NCHW
+    y = torch.FloatTensor(train_out.transpose(0, 3, 1, 2)).to(device)
     dataset = TensorDataset(x, y)
+    # print(x.shape)
+    # print(y.shape)
+    model = Colorization_Model(in_channels=3)
+    
+    batch_size = 8
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    
-    batch_size = 8
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    
     model.to(device)  # Send model to GPU if available
-    
-    train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50, batch_size=2)
+    summary(model, (3,224,224))
+    # train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50)
 
 # Assuming you have set the device
-device = "cuda"
 run()
