@@ -58,14 +58,14 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.convt1 = nn.ConvTranspose2d(1280, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
+        self.convt1 = nn.ConvTranspose2d(1280, 512, kernel_size=4, stride=2, padding=1)
         self.dropout = nn.Dropout2d(0.25)
-        self.convt2 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
-        self.convt3 = nn.ConvTranspose2d(768, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
-        self.convt4 = nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1)   # Adjust kernel_size
+        self.convt2 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)
+        self.convt3 = nn.ConvTranspose2d(768, 512, kernel_size=4, stride=2, padding=1)
+        self.convt4 = nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1)
         self.convt5 = nn.ConvTranspose2d(256, 64, kernel_size=4, stride=1, padding=1)
-        self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)    # Adjust kernel_size
-        self.output_layer = nn.Conv2d(32, 2, kernel_size=3, padding=1)  # Adjust kernel_size
+        self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
+        self.output_layer = nn.Conv2d(32, 2, kernel_size=3, padding=1)
         
     def forward(self, skip_f, res_skip_1, res_skip_2):
         dec = F.relu(self.convt1(skip_f))

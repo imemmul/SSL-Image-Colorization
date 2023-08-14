@@ -22,7 +22,6 @@ def train(model, train_loader, val_loader, epochs):
         for inputs, targets in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)
-            print(f"outputs size: {targets.shape}")
             loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
@@ -44,7 +43,9 @@ def train(model, train_loader, val_loader, epochs):
     torch.save(model.state_dict(), './colorization_weights.pth')
 
 def run():
-    
+    # TODO 1500 quite low make it 5000 at least
+    # TODO increase batch size to 16 - 32
+    # TODO you changed in_channels=1 for grayscale so you need to fix model for that output should be 2x224x224
     gray = np.load(dataset_gray)
     ab = np.load(dataset_ab)
     train_in = gray[:1500]
@@ -56,7 +57,7 @@ def run():
     dataset = TensorDataset(x, y)
     # print(x.shape)
     # print(y.shape)
-    model = Colorization_Model(in_channels=3)
+    model = Colorization_Model(in_channels=1)
     
     batch_size = 8
     train_size = int(0.8 * len(dataset))
@@ -65,7 +66,7 @@ def run():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     model.to(device)  # Send model to GPU if available
-    summary(model, (3,224,224))
+    summary(model, (1,224,224))
     train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50)
 
 # Assuming you have set the device
