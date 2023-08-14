@@ -1,78 +1,67 @@
-from keras.models import Model
-from keras.layers import Input, Conv2D, Conv2DTranspose, Dropout, Activation, concatenate, LeakyReLU
-from keras.optimizers import Adam
-import tensorflow as tf
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-class Encoder(tf.keras.layers.Layer):
-    def __init__(self, inshape, **kwargs):
-        super(Encoder, self).__init__(**kwargs)
-        self.base = tf.keras.applications.efficientnet_v2.EfficientNetV2B0(include_top=False, input_shape=inshape, weights="imagenet")
-        self.conv1= Conv2D(64, (3,3), strides=(2,2), padding="same", activation=LeakyReLU())
-        self.conv2= Conv2D(128, (3,3), strides=(1,1), padding="same", activation=LeakyReLU())
-        self.conv3= Conv2D(128, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.conv4 = Conv2D(256, (3, 3), strides=(2, 2), padding='same', activation="relu")
-        self.conv5 = Conv2D(256, (3, 3), strides=(1, 1), padding='same', activation="relu")
-        self.conv6 = Conv2D(512, (3, 3), strides=(2, 2), padding='same', activation="relu")
-        self.conv7 = Conv2D(256, (3, 3), strides=(2, 2), padding='same', activation="relu")
-        self.dropout = Dropout(0.25)
-        # got 7x7
-        self.fusion = Conv2D(512, (1, 1), padding="same", activation="relu")
-    def call(self, inputs):
-        out_base = self.base(inputs)
-        x = self.conv1(inputs)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        res_skip_1 = self.conv5(x)
+class Encoder(nn.Module):
+    def __init__(self, in_channels):
+        super(Encoder, self).__init__()
+        self.base = torch.hub.load('pytorch/vision', 'efficientnet_b0', pretrained=True)
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)
+        self.conv5 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.conv6 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
+        self.conv7 = nn.Conv2d(512, 256, kernel_size=3, stride=2, padding=1)
+        self.dropout = nn.Dropout2d(0.25)
+        self.fusion = nn.Conv2d(768, 512, kernel_size=1, padding=0)
+        
+    def forward(self, inputs):
+        out_base = self.base.extract_features(inputs)
+        x = F.leaky_relu(self.conv1(inputs))
+        x = F.leaky_relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        res_skip_1 = F.relu(self.conv5(x))
         x = res_skip_1
-        res_skip_2 = self.conv6(x)
+        res_skip_2 = F.relu(self.conv6(x))
         x = res_skip_2
-        x = self.conv7(x) # last layer of conv2
-        f = self.fusion(concatenate([out_base, x]))
-        skip_f = concatenate([f, x])
-        return skip_f, self.dropout(res_skip_1), self.dropout(res_skip_2) # res_skip conv4_
+        x = F.relu(self.conv7(x))
+        f = self.fusion(torch.cat([out_base, x], dim=1))
+        skip_f = torch.cat([f, x], dim=1)
+        return skip_f, self.dropout(res_skip_1), self.dropout(res_skip_2)
 
-class Decoder(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(Decoder, self).__init__(**kwargs)
-        self.convt1 = Conv2DTranspose(512, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.dropout = Dropout(0.25)
-        self.convt2 = Conv2DTranspose(256, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.convt3 = Conv2DTranspose(128, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.convt4 = Conv2DTranspose(64, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.convt5 = Conv2DTranspose(64, (3,3), strides=(1,1), padding="same", activation="relu")
-        self.convt5 = Conv2DTranspose(32, (3,3), strides=(2,2), padding="same", activation="relu")
-        self.output_layer = Conv2D(2, (1,1), activation="tanh")
-    def call(self, skip_f, res_skip_1, res_skip_2):
-        dec = self.convt1(skip_f)
+class Decoder(nn.Module):
+    def __init__(self):
+        super(Decoder, self).__init__()
+        self.convt1 = nn.ConvTranspose2d(768, 512, kernel_size=3, stride=2, padding=1)
+        self.dropout = nn.Dropout2d(0.25)
+        self.convt2 = nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1)
+        self.convt3 = nn.ConvTranspose2d(384, 128, kernel_size=3, stride=2, padding=1)
+        self.convt4 = nn.ConvTranspose2d(192, 64, kernel_size=3, stride=2, padding=1)
+        self.convt5 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1)
+        self.output_layer = nn.Conv2d(32, 2, kernel_size=1)
+        
+    def forward(self, skip_f, res_skip_1, res_skip_2):
+        dec = F.relu(self.convt1(skip_f))
         dec = self.dropout(dec)
-        dec = self.convt2(concatenate([dec, res_skip_2]))
+        dec = F.relu(self.convt2(torch.cat([dec, res_skip_2], dim=1)))
         dec = self.dropout(dec)
-        dec = self.convt3(concatenate([dec, res_skip_1]))
+        dec = F.relu(self.convt3(torch.cat([dec, res_skip_1], dim=1)))
         dec = self.dropout(dec)
-        dec = self.convt4(dec)
+        dec = F.relu(self.convt4(dec))
         dec = self.dropout(dec)
-        dec = self.convt5(dec)
+        dec = F.relu(self.convt5(dec))
+        dec = self.convt6(dec)
         return self.output_layer(dec)
-            
-        
 
-class Colorization_Model(Model):
-    def __init__(self, inshape):
+class Colorization_Model(nn.Module):
+    def __init__(self, in_channels):
         super(Colorization_Model, self).__init__()
-        
-        #encoder
-        self.encoder = Encoder(inshape=inshape)
-        
-        #decoder
+        self.encoder = Encoder(in_channels)
         self.decoder = Decoder()
         
-    def call(self, inputs):
+    def forward(self, inputs):
         skip_f, dropout_res_skip_1, dropout_res_skip_2 = self.encoder(inputs)
         return self.decoder(skip_f, dropout_res_skip_1, dropout_res_skip_2)
-
-
-
-
-    
-    

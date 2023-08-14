@@ -1,66 +1,70 @@
+import torch
 from model import Colorization_Model
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
-import matplotlib.pyplot as plt
-import tensorflow as tf
 
 dataset_ab = '/home/emir/Desktop/dev/myResearch/dataset/colorization_lab.npy'
 dataset_gray = '/home/emir/Desktop/dev/myResearch/dataset/l/gray_scale.npy'
 
-def save_plots(history):
-    plt.figure(figsize=(12, 4))
-    plt.subplot(1, 2, 1)
-    plt.plot(history.history['accuracy'], label='Training Accuracy')
-    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Training and Validation Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
 
-    # Plot training and validation loss
-    plt.subplot(1, 2, 2)
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.title('Training and Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    # Save the plots to files
-    plt.tight_layout()
-    plt.savefig('accuracy_loss_plots.png')
-
-def train(model, gray, ab, epochs, batch_size):
-    # Setup the training input data (grayscale images)
-    train_in = gray[:3000]
-    del gray
-    train_in = np.repeat(train_in[..., np.newaxis], 3, -1)
-    print("emir")
+def train(model, train_loader, val_loader, epochs, batch_size):
+    print("Training starting")
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.0003)
     
-    train_out = ab[:3000]
-    del ab
-    # Normalize the data
-    train_in = (train_in.astype('float32') - 127.5) / 127.5
-    train_out = (train_out.astype('float32') - 127.5) / 127.5
-    history = model.fit(
-        train_in,
-        train_out,
-        epochs=epochs,
-        validation_split=0.2,
-        batch_size=batch_size
-    )
-    model.save_weights('colorization_weights.h5')
-    save_plots(history=history)
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0.0
+        for inputs, targets in train_loader:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * inputs.size(0)
+            
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for inputs, targets in val_loader:
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                val_loss += loss.item() * inputs.size(0)
+                
+        train_loss /= len(train_loader.dataset)
+        val_loss /= len(val_loader.dataset)
+        
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
+
+    torch.save(model.state_dict(), 'colorization_weights.pth')
 
 def run():
-    input_shape = (None, 224, 224,3)
-    model = Colorization_Model((224, 224, 3))
-    model.build(input_shape)
-    model.compile(tf.keras.optimizers.Adam(learning_rate=0.0003), loss='mse', metrics=['accuracy'])
+    model = Colorization_Model(in_channels=1)  # Assuming input is grayscale
+    
     gray = np.load(dataset_gray)
     ab = np.load(dataset_ab)
-    print(len(gray))
-    train(model=model, gray=gray, ab=ab, epochs=50, batch_size=8)
+    train_in = gray[:1500]
+    train_out = ab[:1500]
+    
+    train_in = np.repeat(train_in[..., np.newaxis], 3, -1)
+    x = torch.FloatTensor(train_in.transpose(0, 3, 1, 2))  # NHWC to NCHW
+    y = torch.FloatTensor(train_out.transpose(0, 3, 1, 2))
+    
+    dataset = TensorDataset(x, y)
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    
+    batch_size = 8
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    model.to(device)  # Send model to GPU if available
+    
+    train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50, batch_size=2)
 
-
-if __name__ == "__main__":
-    run()
+# Assuming you have set the device
+device = "cuda"
+run()
