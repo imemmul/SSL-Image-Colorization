@@ -26,8 +26,10 @@ class Encoder(nn.Module):
         self.conv5 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
         self.conv6 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
         self.conv7 = nn.Conv2d(512, 256, kernel_size=3, stride=2, padding=1)
+        self.conv8 = nn.Conv2d(256, 512, kernel_size=1)
+        self.conv9 = nn.Conv2d(512, 1024, kernel_size=1)
+        self.conv10 = nn.Conv2d(1024, 1280, kernel_size=1)
         self.dropout = nn.Dropout2d(0.25)
-        self.channel_adjustment = nn.Conv2d(256, 1280, kernel_size=1)
         self.fusion = nn.Conv2d(2560, 1280, kernel_size=1)
         
     def forward(self, inputs):
@@ -41,22 +43,27 @@ class Encoder(nn.Module):
         res_skip_2 = F.relu(self.conv6(x))
         x = res_skip_2
         x = F.relu(self.conv7(x))
-        x_adjusted = self.channel_adjustment(x)
-        print(f"feature extractor out: {out_base.shape}")
-        print(f"enc out: {x_adjusted.shape}")
-        f = self.fusion(torch.cat((out_base, x_adjusted), dim=1))
-        skip_f = torch.cat([f, x], dim=1)
+        x = F.relu(self.conv8(x))
+        x = F.relu(self.conv9(x))
+        x = F.relu(self.conv10(x))
+        # print(f"feature extractor out: {out_base.shape}") # feature extractor out: torch.Size([2, 1280, 7, 7])
+        # print(f"enc out: {x.shape}") # enc out: torch.Size([2, 256, 7, 7])
+        f = self.fusion(torch.cat((out_base, x), dim=1))
+        # print(f"fusion shape: {f.shape}")
+        skip_f = self.fusion(torch.cat((f, x), dim=1))
+        # print(f"skip_f shape: {skip_f.shape}")
+        # print(f"res_skip_1: {res_skip_1.shape}, res_skip_2:{res_skip_2.shape}")
         return skip_f, self.dropout(res_skip_1), self.dropout(res_skip_2)
 
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.convt1 = nn.ConvTranspose2d(1536, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
+        self.convt1 = nn.ConvTranspose2d(1280, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
         self.dropout = nn.Dropout2d(0.25)
         self.convt2 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
         self.convt3 = nn.ConvTranspose2d(768, 512, kernel_size=4, stride=2, padding=1)  # Adjust kernel_size
-        self.convt4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2, padding=1)   # Adjust kernel_size
-        self.convt5 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.convt4 = nn.ConvTranspose2d(512, 256, kernel_size=3, stride=2, padding=1)   # Adjust kernel_size
+        self.convt5 = nn.ConvTranspose2d(256, 64, kernel_size=4, stride=1, padding=1)
         self.convt6 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)    # Adjust kernel_size
         self.output_layer = nn.Conv2d(32, 2, kernel_size=3, padding=1)  # Adjust kernel_size
         
@@ -65,11 +72,11 @@ class Decoder(nn.Module):
         dec = self.dropout(dec)
         
         res_skip_2_resized = F.interpolate(res_skip_2, size=dec.size()[2:], mode='nearest')
-        print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_2_resized.shape}")  # Print shapes for debugging
+        # print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_2_resized.shape}")  # Print shapes for debugging
         dec = F.relu(self.convt2(torch.cat((dec, res_skip_2_resized), dim=1)))
         dec = self.dropout(dec)
         res_skip_1_resized = F.interpolate(res_skip_1, size=dec.size()[2:], mode='nearest')
-        print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_1_resized.shape}")
+        # print(f"dec.shape: {dec.shape}, res_skip_2_resized.shape: {res_skip_1_resized.shape}")
         dec = F.relu(self.convt3(torch.cat((dec, res_skip_1_resized), dim=1)))
         dec = self.dropout(dec)
         dec = F.relu(self.convt4(dec))
@@ -95,4 +102,4 @@ if __name__ == "__main__":
     model.to("cuda")
     enc.to("cuda")
     # summary(model=model, input_size=(3, 224,224), batch_size=32, device="cuda")
-    summary(model=enc, input_size=(3, 224,224), batch_size=32, device="cuda")
+    # summary(model=enc, input_size=(3, 224,224), batch_size=32, device="cuda")

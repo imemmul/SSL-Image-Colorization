@@ -22,6 +22,7 @@ def train(model, train_loader, val_loader, epochs):
         for inputs, targets in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)
+            print(f"outputs size: {targets.shape}")
             loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
@@ -40,7 +41,7 @@ def train(model, train_loader, val_loader, epochs):
         
         print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
 
-    torch.save(model.state_dict(), 'colorization_weights.pth')
+    torch.save(model.state_dict(), './colorization_weights.pth')
 
 def run():
     
@@ -65,7 +66,7 @@ def run():
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     model.to(device)  # Send model to GPU if available
     summary(model, (3,224,224))
-    # train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50)
+    train(model=model, train_loader=train_loader, val_loader=val_loader, epochs=50)
 
 # Assuming you have set the device
 run()
