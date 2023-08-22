@@ -19,6 +19,26 @@ from torchvision import models
 from torchvision import transforms as T
 from torch.utils.tensorboard.summary import hparams
 
+def get_transform(res, is_label, crop_type):
+    if crop_type == "center":
+        cropper = T.CenterCrop(res)
+    elif crop_type == "random":
+        cropper = T.RandomCrop(res)
+    elif crop_type is None:
+        cropper = T.Lambda(lambda x: x)
+        res = (res, res)
+    else:
+        raise ValueError("Unknown Cropper {}".format(crop_type))
+    if is_label:
+        return T.Compose([T.Resize(res, Image.NEAREST),
+                          cropper,
+                          ToTargetTensor()])
+    else:
+        return T.Compose([T.Resize(res, Image.NEAREST),
+                          cropper,
+                          T.ToTensor(),
+                          normalize])
+
 
 def norm(t):
     return F.normalize(t, dim=1, eps=1e-10)

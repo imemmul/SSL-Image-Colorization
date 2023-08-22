@@ -1,13 +1,11 @@
 from models.utils import *
 import torch
 import torch.nn.functional as F
-import dino.vit as vit
 import pytorch_lightning as pl
 from dinofeaturizer import DinoFeaturizer
 from models.modules import *
 from numpy import random
-import sns
-
+import seaborn as sns
 
 class Stego(pl.LightningModule):
     def __init__(self, n_classes, cfg):
