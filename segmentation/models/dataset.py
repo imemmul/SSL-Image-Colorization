@@ -40,6 +40,7 @@ class ContrastiveSegDataset(Dataset):
         self.pos_images = pos_images
         self.extra_transform = extra_transform
         
+        print(f"DATASET NAME: {dataset_name}")
         if dataset_name == "directory":
             self.n_classes = cfg.dir_dataset_n_classes
             dataset_class = DirectoryDataset

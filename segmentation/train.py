@@ -81,7 +81,7 @@ def train(cfg: DictConfig):
         os.path.join(log_dir, name),
         default_hp_metric=False
     )
-    gpu_args = dict(gpus=-1, accelerator='ddp', val_check_interval=cfg.val_freq)
+    gpu_args = dict(gpus=-1, accelerator='cuda', val_check_interval=cfg.val_freq)
         # gpu_args = dict(gpus=1, accelerator='ddp', val_check_interval=cfg.val_freq)
 
     if gpu_args["val_check_interval"] > len(train_loader) // 4:

@@ -1,5 +1,5 @@
 import torch
-import dino.vit as vits
+import models.dino.vit as vits
 import torch.nn as nn
 
 class DinoFeaturizer(nn.Module):
@@ -104,3 +104,12 @@ class DinoFeaturizer(nn.Module):
             return self.dropout(image_feat), code
         else:
             return image_feat, code
+
+
+class LambdaLayer(nn.Module):
+    def __init__(self, lambd):
+        super(LambdaLayer, self).__init__()
+        self.lambd = lambd
+
+    def forward(self, x):
+        return self.lambd(x)

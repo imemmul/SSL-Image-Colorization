@@ -2,7 +2,7 @@ from models.utils import *
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from dinofeaturizer import DinoFeaturizer
+from models.dinofeaturizer import DinoFeaturizer
 from models.modules import *
 from numpy import random
 import seaborn as sns
@@ -52,7 +52,7 @@ class Stego(pl.LightningModule):
         self.automatic_optimization = False
         # TODO self.label_cmap = every_dataset with n_classes
         if self.cfg.dataset_name:
-            self.label_cmap = create_label_cmap()
+            self.label_cmap = create_label_cmap(n_classes=n_classes)
 
         self.val_steps = 0
         self.save_hyperparameters()

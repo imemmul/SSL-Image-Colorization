@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import *
+from models.utils import *
+
+
+
 
 
 class ContrastiveCRFLoss(nn.Module):
