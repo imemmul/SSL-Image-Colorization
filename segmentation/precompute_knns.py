@@ -10,14 +10,69 @@ import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 from tqdm import tqdm
+from sklearn.decomposition import PCA
+import random
 
+feats_dir = "./feats/"
+plots_dir = "./plots/"
+
+
+def visualize_knns_on_images_and_save(knns, data_loader, save_dir, k=5):
+     
+   for i, knn_indices in enumerate(knns):
+        plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
+
+        original_img = None
+        for batch in data_loader:
+            if i < len(batch):
+                original_img = batch["img"][i]
+                break
+        if original_img is not None:
+            plt.subplot(1, k + 1, 1)
+            plt.imshow(np.transpose(original_img.numpy(), (1, 2, 0)))
+            plt.title('Original Image')
+        
+        # Generate random colors for each cluster
+        cluster_colors = {}
+        for j in range(k):
+            knn_index = knn_indices[j]
+            if knn_index not in cluster_colors:
+                cluster_color = (random.random(), random.random(), random.random())  # RGB values as a tuple
+                cluster_colors[knn_index] = np.array(cluster_color)  # Convert to NumPy array
+                
+        # Load and display KNN images with cluster colorization
+        for j in range(k):
+            knn_index = knn_indices[j]
+            knn_img = None
+            for batch in data_loader:
+                if knn_index < len(batch):
+                    knn_img = batch["img"][knn_index]
+                    break
+            if knn_img is not None:
+                knn_img = np.transpose(knn_img.numpy(), (1, 2, 0))
+                cluster_color = cluster_colors[knn_index]
+                knn_img_with_color = knn_img + 0.5 * cluster_color  # Add color with reduced intensity
+                knn_img_with_color = np.clip(knn_img_with_color, 0, 1)  # Clip values to [0, 1]
+                plt.subplot(1, k + 1, j + 2)
+                plt.imshow(knn_img_with_color)
+                plt.title(f'KNN {j + 1}')
+
+        plt.tight_layout()
+        
+        image_filename = os.path.join(save_dir, f'visualization_{i}.png')
+        plt.savefig(image_filename, bbox_inches='tight')  # Save the figure
+        
+        # Close the figure to free resources
+        plt.close()
 
 def get_feats(model, loader):
     all_feats = []
     for pack in tqdm(loader):
         img = pack["img"]
         feats = F.normalize(model.forward(img.cuda()).mean([2, 3]), dim=1)
+        print(f"feats shape: {feats.shape}")
         all_feats.append(feats.to("cpu", non_blocking=True))
+    
     return torch.cat(all_feats, dim=0).contiguous()
 
 
@@ -74,7 +129,7 @@ def my_app(cfg: DictConfig) -> None:
                         cfg=cfg,
                     )
 
-                    loader = DataLoader(dataset, 8, shuffle=False, num_workers=cfg.num_workers, pin_memory=False)
+                    loader = DataLoader(dataset, 16, shuffle=False, num_workers=cfg.num_workers, pin_memory=False)
 
                     with torch.no_grad():
                         normed_feats = get_feats(par_model, loader)
@@ -92,7 +147,10 @@ def my_app(cfg: DictConfig) -> None:
                         print(f"saving: {feature_cache_file}")
                         np.savez_compressed(feature_cache_file, nns=nearest_neighbors.numpy())
                         print("Saved NNs", cfg.model_type, nice_dataset_name, image_set)
-
+                    data_point_index = 0
+                    knn_indices = nearest_neighbors[data_point_index].cpu().numpy()
+                    visualize_knns_on_images_and_save(knns=[knn_indices], data_loader=loader, save_dir=feats_dir, )
+                    
 
 if __name__ == "__main__":
     prep_args()
