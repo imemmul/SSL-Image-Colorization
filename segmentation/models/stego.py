@@ -52,7 +52,7 @@ class Stego(pl.LightningModule):
         self.automatic_optimization = False
         # TODO self.label_cmap = every_dataset with n_classes
         if self.cfg.dataset_name:
-            self.label_cmap = create_label_cmap(n_classes=n_classes)
+            self.label_cmap = create_label_cmap()
 
         self.val_steps = 0
         self.save_hyperparameters()
@@ -242,7 +242,9 @@ class Stego(pl.LightningModule):
                 fig, ax = plt.subplots(4, self.cfg.n_images, figsize=(self.cfg.n_images * 3, 4 * 3))
                 for i in range(self.cfg.n_images):
                     ax[0, i].imshow(prep_for_plot(output["img"][i]))
-                    ax[1, i].imshow(self.label_cmap[output["label"][i]])
+                    shape_out = output["label"].shape
+                    print(f"shape of output: {shape_out}")
+                    ax[1, i].imshow(self.label_cmap[output["label"][i][0]]) # FIXME wrong shape (1, 320, 320, 3), FIXED
                     ax[2, i].imshow(self.label_cmap[output["linear_preds"][i]])
                     ax[3, i].imshow(self.label_cmap[self.cluster_metrics.map_clusters(output["cluster_preds"][i])])
                 ax[0, 0].set_ylabel("Image", fontsize=16)

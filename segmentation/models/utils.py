@@ -383,13 +383,25 @@ def flexible_collate(batch):
 
     raise TypeError(default_collate_err_msg_format.format(elem_type))
 
+def bit_get(val, idx):
+    """Gets the bit value.
+    Args:
+      val: Input value, int or numpy int array.
+      idx: Which bit of the input val.
+    Returns:
+      The "idx"-th bit of input val.
+    """
+    return (val >> idx) & 1
+
+
 import numpy as np
-def create_label_cmap(n_classes):
-    colors = []
-    for _ in range(n_classes):
-        val_0 = np.random.randint(255)
-        val_1 = np.random.randint(255)
-        val_2 = np.random.randint(255)
-        colors.append((val_0, val_1, val_2))
-            
-    return np.array(colors)
+def create_label_cmap():
+    colormap = np.zeros((512, 3), dtype=int)
+    ind = np.arange(512, dtype=int)
+
+    for shift in reversed(list(range(8))):
+        for channel in range(3):
+            colormap[:, channel] |= bit_get(ind, channel) << shift
+        ind >>= 3
+
+    return colormap

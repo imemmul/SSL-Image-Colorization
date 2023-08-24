@@ -40,13 +40,13 @@ def my_app(cfg: DictConfig) -> None:
     dataset_names = ["directory"]
     crop_types = [None]
 
-    res = 224 # TODO is this important ? 
+    res = 224
     n_batches = 16 # setting this 16
 
     if cfg.arch == "dino":
         from models.dinofeaturizer import DinoFeaturizer, LambdaLayer
         no_ap_model = torch.nn.Sequential(
-            DinoFeaturizer(5, cfg),  # dim doesent matter # NOTE dim changed from 20 to 5
+            DinoFeaturizer(20, cfg),  # dim doesent matter # NOTE dim changed from 20 to 5
             LambdaLayer(lambda p: p[0]),
         ).cuda()
     else:
@@ -88,6 +88,7 @@ def my_app(cfg: DictConfig) -> None:
                             all_nns.append(torch.topk(pairwise_sims, 30)[1])
                             del pairwise_sims
                         nearest_neighbors = torch.cat(all_nns, dim=0)
+                        print(f"nearest_neighbors shape: {nearest_neighbors.shape}")
                         print(f"saving: {feature_cache_file}")
                         np.savez_compressed(feature_cache_file, nns=nearest_neighbors.numpy())
                         print("Saved NNs", cfg.model_type, nice_dataset_name, image_set)
