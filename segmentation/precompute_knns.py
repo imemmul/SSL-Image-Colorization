@@ -37,10 +37,9 @@ def visualize_knns_on_images_and_save(knns, data_loader, save_dir, k=5):
         for j in range(k):
             knn_index = knn_indices[j]
             if knn_index not in cluster_colors:
-                cluster_color = (random.random(), random.random(), random.random())  # RGB values as a tuple
-                cluster_colors[knn_index] = np.array(cluster_color)  # Convert to NumPy array
+                cluster_color = (random.random(), random.random(), random.random())
+                cluster_colors[knn_index] = np.array(cluster_color)
                 
-        # Load and display KNN images with cluster colorization
         for j in range(k):
             knn_index = knn_indices[j]
             knn_img = None
@@ -88,12 +87,11 @@ def my_app(cfg: DictConfig) -> None:
 
     seed_everything(seed=0)
 
-    print(data_dir)
-    print(cfg.output_root)
 
     image_sets = ["val", "train"]
     dataset_names = ["directory"]
-    crop_types = [None]
+    crop_types = ["five", None]
+    # crop_types = [None]
 
     res = 224
     n_batches = 16 # setting this 16
@@ -135,7 +133,7 @@ def my_app(cfg: DictConfig) -> None:
                         normed_feats = get_feats(par_model, loader)
                         all_nns = []
                         step = normed_feats.shape[0] // n_batches
-                        print(normed_feats.shape)
+                        # print(normed_feats.shape)
                         for i in tqdm(range(0, normed_feats.shape[0], step)):
                             torch.cuda.empty_cache()
                             batch_feats = normed_feats[i:i + step, :]

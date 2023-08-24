@@ -184,3 +184,33 @@
 [2023-08-24 14:30:07,549][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
 [2023-08-24 14:30:07,549][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
 [2023-08-24 14:30:07,549][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
+[2023-08-24 17:48:43,567][pytorch_lightning.utilities.rank_zero][INFO] - GPU available: True (cuda), used: True
+[2023-08-24 17:48:43,586][pytorch_lightning.utilities.rank_zero][INFO] - TPU available: False, using: 0 TPU cores
+[2023-08-24 17:48:43,586][pytorch_lightning.utilities.rank_zero][INFO] - IPU available: False, using: 0 IPUs
+[2023-08-24 17:48:43,586][pytorch_lightning.utilities.rank_zero][INFO] - HPU available: False, using: 0 HPUs
+[2023-08-24 17:48:43,588][pytorch_lightning.loggers.tensorboard][WARNING] - Missing logger folder: ../logs/..//directory_exp1_date_Aug24_17-48-42/lightning_logs
+[2023-08-24 17:48:43,590][pytorch_lightning.accelerators.cuda][INFO] - LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+[2023-08-24 17:48:43,594][pytorch_lightning.callbacks.model_summary][INFO] - 
+   | Name                     | Type                       | Params
+-------------------------------------------------------------------------
+0  | net                      | DinoFeaturizer             | 21.9 M
+1  | train_cluster_probe      | ClusterLookup              | 140   
+2  | cluster_probe            | ClusterLookup              | 140   
+3  | linear_probe             | Conv2d                     | 142   
+4  | decoder                  | Conv2d                     | 27.3 K
+5  | cluster_metrics          | UnsupervisedMetrics        | 0     
+6  | linear_metrics           | UnsupervisedMetrics        | 0     
+7  | test_cluster_metrics     | UnsupervisedMetrics        | 0     
+8  | test_linear_metrics      | UnsupervisedMetrics        | 0     
+9  | linear_probe_loss_fn     | CrossEntropyLoss           | 0     
+10 | crf_loss_fn              | ContrastiveCRFLoss         | 0     
+11 | contrastive_corr_loss_fn | ContrastiveCorrelationLoss | 0     
+-------------------------------------------------------------------------
+229 K     Trainable params
+21.7 M    Non-trainable params
+21.9 M    Total params
+87.599    Total estimated model params size (MB)
+[2023-08-24 17:48:48,700][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
+[2023-08-24 17:48:48,700][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
+[2023-08-24 17:48:48,700][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
+[2023-08-24 17:48:48,700][tensorboardX.x2num][WARNING] - NaN or Inf found in input tensor.
