@@ -1,0 +1,3 @@
+dataset_dir: /home/emir/Desktop/dev/myResearch/dataset/FoodSeg103
+dataset_name: FoodSeg103
+version_base: None
