@@ -1,0 +1,1 @@
+designing a segmentation model with dinov2 backbone, there will be linear probing head to predict masks, not unsupervised fashion, (semi-supervised). As backbone, One of the DinoV2 distilled version will be used. 

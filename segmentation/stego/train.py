@@ -17,7 +17,9 @@ from models.dataset import ContrastiveSegDataset
 from models.utils import *
 from torchvision import transforms as T
 
-@hydra.main(config_path="configs", config_name="train_config.yml")
+
+
+@hydra.main(config_path="configs", config_name="train_config.yaml")
 def train(cfg: DictConfig):
     OmegaConf.set_struct(cfg, False)
     print(OmegaConf.to_yaml(cfg))
@@ -81,8 +83,7 @@ def train(cfg: DictConfig):
         os.path.join(log_dir, name),
         default_hp_metric=False
     )
-    gpu_args = dict(gpus=-1, accelerator='cuda', val_check_interval=cfg.val_freq)
-        # gpu_args = dict(gpus=1, accelerator='ddp', val_check_interval=cfg.val_freq)
+    gpu_args = dict(accelerator='gpu', devices=-1, val_check_interval=cfg.val_freq)
 
     if gpu_args["val_check_interval"] > len(train_loader) // 4:
         gpu_args.pop("val_check_interval")

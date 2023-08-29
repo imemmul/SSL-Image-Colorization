@@ -3,9 +3,11 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from models.dinofeaturizer import DinoFeaturizer
-from models.modules import *
 from numpy import random
 import seaborn as sns
+import os
+import torch.nn as nn
+import matplotlib.pyplot as plt
 
 class Stego(pl.LightningModule):
     def __init__(self, n_classes, cfg):
@@ -18,14 +20,13 @@ class Stego(pl.LightningModule):
         else:
             dim = cfg.dim
         
-        data_dir = join(cfg.output_root, "data")
+        data_dir = os.path.join(cfg.output_root, "data")
         if cfg.arch == "dino":
             self.net = DinoFeaturizer(dim, cfg)
         else:
             raise ValueError("Unknown arch {}".format(cfg.arch))
         
         self.train_cluster_probe = ClusterLookup(dim, n_classes)
-        self.cluster_probe = ClusterLookup(dim, n_classes + cfg.extra_clusters)
         self.cluster_probe = ClusterLookup(dim, n_classes + cfg.extra_clusters)
         self.linear_probe = nn.Conv2d(dim, n_classes, (1, 1))
 
@@ -339,3 +340,227 @@ class Stego(pl.LightningModule):
 
 def get_class_labels():
     return ['class_0', 'background']
+
+class ContrastiveCRFLoss(nn.Module):
+
+    def __init__(self, n_samples, alpha, beta, gamma, w1, w2, shift):
+        super(ContrastiveCRFLoss, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.w1 = w1
+        self.w2 = w2
+        self.n_samples = n_samples
+        self.shift = shift
+
+    def forward(self, guidance, clusters):
+        device = clusters.device
+        assert (guidance.shape[0] == clusters.shape[0])
+        assert (guidance.shape[2:] == clusters.shape[2:])
+        h = guidance.shape[2]
+        w = guidance.shape[3]
+
+        coords = torch.cat([
+            torch.randint(0, h, size=[1, self.n_samples], device=device),
+            torch.randint(0, w, size=[1, self.n_samples], device=device)], 0)
+
+        selected_guidance = guidance[:, :, coords[0, :], coords[1, :]]
+        coord_diff = (coords.unsqueeze(-1) - coords.unsqueeze(1)).square().sum(0).unsqueeze(0)
+        guidance_diff = (selected_guidance.unsqueeze(-1) - selected_guidance.unsqueeze(2)).square().sum(1)
+
+        sim_kernel = self.w1 * torch.exp(- coord_diff / (2 * self.alpha) - guidance_diff / (2 * self.beta)) + \
+                     self.w2 * torch.exp(- coord_diff / (2 * self.gamma)) - self.shift
+
+        selected_clusters = clusters[:, :, coords[0, :], coords[1, :]]
+        cluster_sims = torch.einsum("nka,nkb->nab", selected_clusters, selected_clusters)
+        return -(cluster_sims * sim_kernel)
+
+
+class ContrastiveCorrelationLoss(nn.Module):
+
+    def __init__(self, cfg, ):
+        super(ContrastiveCorrelationLoss, self).__init__()
+        self.cfg = cfg
+
+    def standard_scale(self, t):
+        t1 = t - t.mean()
+        t2 = t1 / t1.std()
+        return t2
+
+    def helper(self, f1, f2, c1, c2, shift):
+        with torch.no_grad():
+            # Comes straight from backbone which is currently frozen. this saves mem.
+            fd = tensor_correlation(norm(f1), norm(f2))
+
+            if self.cfg.pointwise:
+                old_mean = fd.mean()
+                fd -= fd.mean([3, 4], keepdim=True)
+                fd = fd - fd.mean() + old_mean
+
+        cd = tensor_correlation(norm(c1), norm(c2))
+
+        if self.cfg.zero_clamp:
+            min_val = 0.0
+        else:
+            min_val = -9999.0
+
+        if self.cfg.stabalize:
+            loss = - cd.clamp(min_val, .8) * (fd - shift)
+        else:
+            loss = - cd.clamp(min_val) * (fd - shift)
+
+        return loss, cd
+
+    def forward(self,
+                orig_feats: torch.Tensor, orig_feats_pos: torch.Tensor,
+                orig_salience: torch.Tensor, orig_salience_pos: torch.Tensor,
+                orig_code: torch.Tensor, orig_code_pos: torch.Tensor,
+                ):
+
+        coord_shape = [orig_feats.shape[0], self.cfg.feature_samples, self.cfg.feature_samples, 2]
+
+        if self.cfg.use_salience:
+            coords1_nonzero = sample_nonzero_locations(orig_salience, coord_shape)
+            coords2_nonzero = sample_nonzero_locations(orig_salience_pos, coord_shape)
+            coords1_reg = torch.rand(coord_shape, device=orig_feats.device) * 2 - 1
+            coords2_reg = torch.rand(coord_shape, device=orig_feats.device) * 2 - 1
+            mask = (torch.rand(coord_shape[:-1], device=orig_feats.device) > .1).unsqueeze(-1).to(torch.float32)
+            coords1 = coords1_nonzero * mask + coords1_reg * (1 - mask)
+            coords2 = coords2_nonzero * mask + coords2_reg * (1 - mask)
+        else:
+            coords1 = torch.rand(coord_shape, device=orig_feats.device) * 2 - 1
+            coords2 = torch.rand(coord_shape, device=orig_feats.device) * 2 - 1
+
+        feats = sample(orig_feats, coords1)
+        code = sample(orig_code, coords1)
+
+        feats_pos = sample(orig_feats_pos, coords2)
+        code_pos = sample(orig_code_pos, coords2)
+
+        pos_intra_loss, pos_intra_cd = self.helper(
+            feats, feats, code, code, self.cfg.pos_intra_shift)
+        pos_inter_loss, pos_inter_cd = self.helper(
+            feats, feats_pos, code, code_pos, self.cfg.pos_inter_shift)
+
+        neg_losses = []
+        neg_cds = []
+        for i in range(self.cfg.neg_samples):
+            perm_neg = super_perm(orig_feats.shape[0], orig_feats.device)
+            feats_neg = sample(orig_feats[perm_neg], coords2)
+            code_neg = sample(orig_code[perm_neg], coords2)
+            neg_inter_loss, neg_inter_cd = self.helper(
+                feats, feats_neg, code, code_neg, self.cfg.neg_inter_shift)
+            neg_losses.append(neg_inter_loss)
+            neg_cds.append(neg_inter_cd)
+        neg_inter_loss = torch.cat(neg_losses, axis=0)
+        neg_inter_cd = torch.cat(neg_cds, axis=0)
+
+        return (pos_intra_loss.mean(),
+                pos_intra_cd,
+                pos_inter_loss.mean(),
+                pos_inter_cd,
+                neg_inter_loss,
+                neg_inter_cd)
+
+
+class ClusterLookup(nn.Module):
+
+    def __init__(self, dim: int, n_classes: int):
+        super(ClusterLookup, self).__init__()
+        self.n_classes = n_classes
+        self.dim = dim
+        self.clusters = torch.nn.Parameter(torch.randn(n_classes, dim))
+
+    def reset_parameters(self):
+        with torch.no_grad():
+            self.clusters.copy_(torch.randn(self.n_classes, self.dim))
+
+    def forward(self, x, alpha, log_probs=False):
+        normed_clusters = F.normalize(self.clusters, dim=1)
+        normed_features = F.normalize(x, dim=1)
+        inner_products = torch.einsum("bchw,nc->bnhw", normed_features, normed_clusters)
+
+        if alpha is None:
+            cluster_probs = F.one_hot(torch.argmax(inner_products, dim=1), self.clusters.shape[0]) \
+                .permute(0, 3, 1, 2).to(torch.float32)
+        else:
+            cluster_probs = nn.functional.softmax(inner_products * alpha, dim=1)
+
+        cluster_loss = -(cluster_probs * inner_products).sum(1).mean()
+        if log_probs:
+            return nn.functional.log_softmax(inner_products * alpha, dim=1)
+        else:
+            return cluster_loss, cluster_probs
+
+class UnsupervisedMetrics(Metric):
+    def __init__(self, prefix: str, n_classes: int, extra_clusters: int, compute_hungarian: bool,
+                 dist_sync_on_step=True):
+        # call `self.add_state`for every internal state that is needed for the metrics computations
+        # dist_reduce_fx indicates the function that should be used to reduce
+        # state from multiple processes
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+
+        self.n_classes = n_classes
+        self.extra_clusters = extra_clusters
+        self.compute_hungarian = compute_hungarian
+        self.prefix = prefix
+        self.add_state("stats",
+                       default=torch.zeros(n_classes + self.extra_clusters, n_classes, dtype=torch.int64),
+                       dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        with torch.no_grad():
+            actual = target.reshape(-1)
+            preds = preds.reshape(-1)
+            mask = (actual >= 0) & (actual < self.n_classes) & (preds >= 0) & (preds < self.n_classes)
+            actual = actual[mask]
+            preds = preds[mask]
+            self.stats += torch.bincount(
+                (self.n_classes + self.extra_clusters) * actual + preds,
+                minlength=self.n_classes * (self.n_classes + self.extra_clusters)) \
+                .reshape(self.n_classes, self.n_classes + self.extra_clusters).t().to(self.stats.device)
+
+    def map_clusters(self, clusters):
+        if self.extra_clusters == 0:
+            return torch.tensor(self.assignments[1])[clusters]
+        else:
+            missing = sorted(list(set(range(self.n_classes + self.extra_clusters)) - set(self.assignments[0])))
+            cluster_to_class = self.assignments[1]
+            for missing_entry in missing:
+                if missing_entry == cluster_to_class.shape[0]:
+                    cluster_to_class = np.append(cluster_to_class, -1)
+                else:
+                    cluster_to_class = np.insert(cluster_to_class, missing_entry + 1, -1)
+            cluster_to_class = torch.tensor(cluster_to_class)
+            return cluster_to_class[clusters]
+
+    def compute(self):
+        if self.compute_hungarian:
+            self.assignments = linear_sum_assignment(self.stats.detach().cpu(), maximize=True)
+            # print(self.assignments)
+            if self.extra_clusters == 0:
+                self.histogram = self.stats[np.argsort(self.assignments[1]), :]
+            if self.extra_clusters > 0:
+                self.assignments_t = linear_sum_assignment(self.stats.detach().cpu().t(), maximize=True)
+                histogram = self.stats[self.assignments_t[1], :]
+                missing = list(set(range(self.n_classes + self.extra_clusters)) - set(self.assignments[0]))
+                new_row = self.stats[missing, :].sum(0, keepdim=True)
+                histogram = torch.cat([histogram, new_row], axis=0)
+                new_col = torch.zeros(self.n_classes + 1, 1, device=histogram.device)
+                self.histogram = torch.cat([histogram, new_col], axis=1)
+        else:
+            self.assignments = (torch.arange(self.n_classes).unsqueeze(1),
+                                torch.arange(self.n_classes).unsqueeze(1))
+            self.histogram = self.stats
+
+        tp = torch.diag(self.histogram)
+        fp = torch.sum(self.histogram, dim=0) - tp
+        fn = torch.sum(self.histogram, dim=1) - tp
+
+        iou = tp / (tp + fp + fn)
+        prc = tp / (tp + fn)
+        opc = torch.sum(tp) / torch.sum(self.histogram)
+
+        metric_dict = {self.prefix + "mIoU": iou[~torch.isnan(iou)].mean().item(),
+                       self.prefix + "Accuracy": opc.item()}
+        return {k: 100 * v for k, v in metric_dict.items()}

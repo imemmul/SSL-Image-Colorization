@@ -1,20 +1,20 @@
 output_root: '../'
-pytorch_data_dir: '/home/emir/Desktop/dev/myResearch/dataset/'
+pytorch_data_dir: '/home/emir/Desktop/dev/dataset/'
 experiment_name: "exp1"
 log_dir: "../"
 azureml_logging: False
 submitting_to_aml: False
 
 # Loader params
-num_workers: 24
-max_steps: 5000
+num_workers: 12
+max_steps: 10000
 batch_size: 16
 
 num_neighbors: 7
-dataset_name: "directory"
+dataset_name: "CityScapes"
 
 # Used if dataset_name is "directory"
-dir_dataset_name: "VOCStego"
+dir_dataset_name: "CityScapes"
 dir_dataset_n_classes: 2
 
 has_labels: False
