@@ -1,12 +1,33 @@
 from torch.utils.data import Dataset
 import torch
 import numpy as np
+from dataset.visualize_dataset import visualize_map
 import os
 import hydra
 from torchvision.transforms import Compose
 from PIL import Image
+import torchvision.transforms as transforms
+
+ADE_MEAN = np.array([123.675, 116.280, 103.530]) / 255
+ADE_STD = np.array([58.395, 57.120, 57.375]) / 255
+
+
 def create_cmap(classes:dict):
     return {k: list(np.random.choice(range(256), size=3)) for k,v in classes.items()}
+
+def collate_fn(inputs):
+    batch = dict()
+    batch["images"] = torch.stack([i[0] for i in inputs], dim=0)
+    batch["labels"] = torch.stack([i[1] for i in inputs], dim=0)
+    batch["original_images"] = [i[2] for i in inputs]
+    batch["original_segmentation_maps"] = [i[3] for i in inputs]
+    return batch
+
+def check_dataset(dataset_dir):
+    for dir in os.listdir(dataset_dir):
+        img_dir = os.path.join(dataset_dir, dir)
+        img = np.array(Image.open(img_dir))
+        print(img.shape)
 
 class CustomDataset(Dataset):
     def __init__(self, dataset, transform:Compose, classes:dict) -> None:
@@ -14,21 +35,19 @@ class CustomDataset(Dataset):
         self.dataset = dataset
         self.transform = transform
         self.classes = classes
-    
+        self.normalization = transforms.Normalize(mean=ADE_MEAN, std=ADE_STD)
     def __len__(self):
         return len(self.dataset)
-    
-    def __getitem__(self, index):
-        item = self.dataset[index]
-        original_image = np.array(Image.open(item['image']))
-        original_image_map = np.array(Image.open(item['label']))
-        print(original_image.shape)
-        print(original_image_map.shape)
-        image = self.transform(img=original_image)
-        target = self.transform(img=original_image_map)
-        image = image.permute(2, 0, 1)
-        return image, target, original_image, original_image_map
 
+    def __getitem__(self, index): # dataset[0]
+        item = self.dataset[index]
+        original_image = torch.Tensor(np.array(Image.open(item['image'])))
+        original_image_map = torch.LongTensor(np.array(Image.open(item['label'])))
+        original_image = original_image.permute(2, 0, 1)
+        image = self.transform(img=original_image)
+        image = self.normalization(image)
+        target = self.transform(img=original_image_map.unsqueeze(0))
+        return image, target, original_image, original_image_map
 
 def load_dataset_foodseg103(dataset_dir:str):
     image_sets_folder = os.path.join(dataset_dir, "ImageSets")
@@ -57,7 +76,7 @@ def load_dataset_foodseg103(dataset_dir:str):
         else:
             val_dataset.append({
                 "image": os.path.join(img_dir, "test", image_id),
-                "label": os.path.join(ann_dir, "test", image_id[:-3] + ".png")
+                "label": os.path.join(ann_dir, "test", image_id[:-3] + "png")
             })
     return train_dataset, val_dataset, categories
     
