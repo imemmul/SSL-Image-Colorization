@@ -21,7 +21,7 @@ val_transform = transforms.Compose([
     transforms.Resize(size=(448, 448), antialias=True),
 ])
 
-def train_model(model, cfg, train_dataloader, classes):
+def train_model(model:Dinov2ForSemanticSegmentation, cfg, train_dataloader, classes):
     epochs = cfg.epochs
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate)
@@ -36,8 +36,8 @@ def train_model(model, cfg, train_dataloader, classes):
             imgs = batch["images"].to(device)
             labels = batch["labels"].to(device)
 
-            outputs = model(imgs, labels=labels)
-            loss = outputs.loss
+            outputs = model(imgs, labels=labels, output_attentions=True)
+            loss = outputs["loss"]
 
             loss.backward()
             optimizer.step()
@@ -45,7 +45,7 @@ def train_model(model, cfg, train_dataloader, classes):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                predicted = outputs.logits.argmax(dim=1)
+                predicted = outputs["logits"].argmax(dim=1)
                 predicted_process = predicted[0].detach().cpu().numpy().squeeze()
                 plt.imsave("./processing_predicted.png", predicted_process)
                 # print(f"type of predictions: {predicted.detach().cpu().numpy().shape}")

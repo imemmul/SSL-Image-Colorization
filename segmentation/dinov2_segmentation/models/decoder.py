@@ -15,6 +15,8 @@ class LinearClassifier(torch.nn.Module):
         self.bn = torch.nn.SyncBatchNorm(in_channels)
         self.classifier = torch.nn.Conv2d(in_channels, num_labels, (1,1))
     def forward(self, embeddings):
+        embeddings = embeddings.reshape(-1, self.height, self.width, self.in_channels)
+        embeddings = embeddings.permute(0,3,1,2)
         embeddings = self.bn(embeddings)
         return self.classifier(embeddings)
 
