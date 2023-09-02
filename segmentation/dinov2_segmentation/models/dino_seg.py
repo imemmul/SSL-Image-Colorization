@@ -20,11 +20,12 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
     outputs = self.dinov2.forward_features(input)
     patch_embeddings = outputs['x_norm_patchtokens']
     logits = self.classifier(patch_embeddings)
-    print(f"shape of logits: {logits.shape}")
+    # print(f"shape of logits: {logits.shape}")
     logits = torch.nn.functional.interpolate(logits, size=input.shape[2:], mode="bilinear", align_corners=False)
     loss = None
     if output_attentions:
-      self.save_attention_maps(input, patch_embeddings)
+      pass
+      #self.save_attention_maps(input, patch_embeddings) disabled for now
     if labels is not None:
       torch.autograd.set_detect_anomaly(True)
       label_map = labels[0].detach().cpu().numpy().squeeze()

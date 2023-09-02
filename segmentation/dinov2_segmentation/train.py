@@ -56,7 +56,8 @@ def train_model(model:Dinov2ForSemanticSegmentation, cfg, train_dataloader, clas
         print("Mean_iou:", miou)
         print("Mean accuracy:", macc)
         print("--------------------------------------------------")
-    torch.save(model.state_dict(), "./model.pth")
+    torch.save(model.dinov2.state_dict(), "./backbone_dinov2.pth")
+    torch.save(model.classifier.state_dict(), "./classifier.pth")
 
 @hydra.main(config_path="./configs", config_name="train_config.yaml", version_base=None)
 def main(cfg:DictConfig):
