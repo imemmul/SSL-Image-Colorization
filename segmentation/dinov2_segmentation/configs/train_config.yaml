@@ -6,7 +6,7 @@ classifier: Linear
 num_workers: 1 # 2
 model_name: facebook/dinov2-large
 learning_rate: 1e-3
-epochs: 100
+epochs: 50
 metric: mIoU
 hidden_size: 1024
 attention_out: ./attention_maps

@@ -43,11 +43,11 @@ def validate_model(model, val_dataloader, device, classes):
             outputs = model(imgs, labels=labels, output_attentions=True)
             loss = outputs["loss"]
 
-            predicted = outputs["logits"].argmax(dim=1)
+            predicted = outputs["logits"]
             miou = compute_iou(predicted, labels)
             macc = compute_mean_accuracy(predicted, labels, len(classes))
 
-            total_loss += loss.item()
+            total_loss += loss.mean().tem()
             total_miou += miou
             total_macc += macc
 
@@ -82,18 +82,17 @@ def train_model(model, cfg, train_dataloader, val_dataloader, classes):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                
-                predicted = outputs["logits"].argmax(dim=1)
+                predicted = outputs["logits"]
                 predicted_process = predicted[0].detach().cpu().numpy().squeeze()
                 plt.imsave(f"{ABS_PATH}processing_predicted.png", predicted_process)
                 # print(f"type of predictions: {predicted.detach().cpu().numpy().shape}")
                 # print(f"type of labels{labels.detach().cpu().numpy().shape}")
-        miou = compute_iou(predicted, labels)
-        macc = compute_mean_accuracy(predicted, labels, len(classes))
-        print("Train Loss:", loss.item())
-        print("Train mIoU:", miou)
-        print("Train mAcc:", macc)
-        print("--------------------------------------------------")
+                miou = compute_iou(predicted, labels)
+                macc = compute_mean_accuracy(predicted, labels, len(classes))
+                print("Train Loss:", loss.mean().item())
+                print("Train mIoU:", miou)
+                print("Train mAcc:", macc)
+                print("--------------------------------------------------")
         validate_model(val_dataloader=val_dataloader, model=model, device=device, classes=classes)
     torch.save(model.dinov2.state_dict(), "./backbone_dinov2.pth")
     torch.save(model.classifier.state_dict(), "./classifier.pth")

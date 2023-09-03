@@ -15,9 +15,9 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
     self.dinov2 = torch.hub.load(repo_or_dir='facebookresearch/dinov2', model=f"dinov2_{config.arch_name}").cuda()
 
     if num_classes <= 2:
-      self.num_classes = num_classes
-      print(f"Binary Segmentation detected: Crossentropy ignore_index -100")
-      self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
+      self.num_classes = num_classes - 1
+      print(f"Binary Segmentation detected: BCEWithLogitsLoss")
+      self.loss_fn = torch.nn.BCEWithLogitsLoss()
     else:
       self.num_classes = num_classes
       self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
@@ -42,9 +42,9 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
           label_map,
           cmap="binary"
       )
-      # print(f"labels shape: {labels.shape}")
-      # print(f"logits shape: {logits.shape}")
-      loss = self.loss_fn(logits, labels.squeeze().long()) # probabilty check
+      print(f"labels shape: {labels.shape}")
+      print(f"logits shape: {logits.shape}")
+      loss = self.loss_fn(logits.squeeze(), labels.squeeze()) # probabilty check
     return dict(
         loss=loss,
         logits=logits,
