@@ -14,7 +14,11 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
     self.dinov2 = torch.hub.load(repo_or_dir='facebookresearch/dinov2', model=f"dinov2_{config.arch_name}").cuda()
     self.num_classes = num_classes
     self.classifier = LinearClassifier(config.hidden_size, 32, 32, num_labels=num_classes)
-    self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
+    if self.num_classes <= 2:
+      print(f"Binary Segmentation detected: Crossentropy ignore_index -100")
+      self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
+    else:
+      self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
   def forward(self, input, output_attentions=None, labels=None):
     # use frozen features
     outputs = self.dinov2.forward_features(input)

@@ -1,0 +1,13 @@
+dataset_dir: /home/doga/Projects/emir_workspace/data/matting-data/FishencyVideo
+dataset_name: Fishency
+arch_name: vitl14
+batch_size: 16
+classifier: Linear
+num_workers: 0
+model_name: facebook/dinov2-large
+learning_rate: 0.001
+epochs: 100
+metric: mIoU
+hidden_size: 1024
+attention_out: ./attention_maps
+patch_size: 14

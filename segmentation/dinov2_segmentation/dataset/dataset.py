@@ -30,19 +30,21 @@ def check_dataset(dataset_dir):
         print(img.shape)
 
 class CustomDataset(Dataset):
-    def __init__(self, dataset, transform:Compose, classes:dict) -> None:
+    def __init__(self, dataset, transform:Compose, classes:dict, binary_seg) -> None:
         super().__init__()
         self.dataset = dataset
         self.transform = transform
         self.classes = classes
+        self.binary_seg = binary_seg
         self.normalization = transforms.Normalize(mean=ADE_MEAN, std=ADE_STD)
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, index): # dataset[0]
         item = self.dataset[index]
-        original_image = torch.Tensor(np.array(Image.open(item['image'])))
-        original_image_map = torch.LongTensor(np.array(Image.open(item['label'])))
+        if self.binary_seg:
+            original_image = torch.Tensor(np.array(Image.open(item['image'])))
+            original_image_map = torch.LongTensor(np.array(Image.open(item['label']).convert("L")))
         original_image = original_image.permute(2, 0, 1)
         image = self.transform(img=original_image)
         image = self.normalization(image)
@@ -79,4 +81,31 @@ def load_dataset_foodseg103(dataset_dir:str):
                 "label": os.path.join(ann_dir, "test", image_id[:-3] + "png")
             })
     return train_dataset, val_dataset, categories
-    
+
+def load_dataset_fishency(dataset_dir:str):
+    classes = {0: "background",
+              1: "fish"}
+    train_dataset = []
+    val_dataset = []
+    for split in os.listdir(dataset_dir):
+        split_dir = os.path.join(dataset_dir, split)
+        for cat in os.listdir(split_dir):
+            if cat == "fgr":
+                images_dir = os.path.join(split_dir, cat)
+            else:
+                labels_dir = os.path.join(split_dir, cat)
+        for img_folder in sorted(os.listdir(images_dir)):
+            img_folder_dir = os.path.join(images_dir, img_folder)
+            for img in sorted(os.listdir(img_folder_dir)):
+                if split == "train":
+                    train_dataset.append({
+                        "image": os.path.join(img_folder_dir, img),
+                        "label": f"{os.path.join(labels_dir, img_folder)}/{img}"
+                    })
+                else:
+                    val_dataset.append({
+                        "image": os.path.join(img_folder_dir, img),
+                        "label": f"{os.path.join(labels_dir, img_folder)}/{img}"
+                    })
+
+    return train_dataset, val_dataset, classes
