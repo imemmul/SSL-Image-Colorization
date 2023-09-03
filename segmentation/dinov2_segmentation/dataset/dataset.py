@@ -49,6 +49,8 @@ class CustomDataset(Dataset):
         image = self.transform(img=original_image)
         image = self.normalization(image)
         target = self.transform(img=original_image_map.unsqueeze(0))
+        # pixel values consist of not only 255 or 0, so need to scale all of them into 0 and 1,
+        target = (target != 0).float()
         return image, target, original_image, original_image_map
 
 def load_dataset_foodseg103(dataset_dir:str):

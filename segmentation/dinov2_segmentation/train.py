@@ -7,24 +7,25 @@ from torch.utils.data import DistributedSampler, DataLoader
 from torchvision.transforms import transforms
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from models.dino_seg import Dinov2ForSemanticSegmentation
+from models.dino_seg import Dinov2ForSemanticSegmentation, ABS_PATH
 from tqdm.auto import tqdm
 from models.utils import compute_iou, compute_mean_accuracy
 import matplotlib.pyplot as plt
 import numpy as np
 from torch import nn
 import torch.distributed as dist
+import os
 
-
+os.environ['TORCH_USE_CUDA_DSA'] = '1'
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 train_transform = transforms.Compose([
-    transforms.Resize(size=(896, 896), antialias=True),
+    transforms.Resize(size=(448, 448), antialias=True),
     transforms.RandomHorizontalFlip(p=0.5),
 ])
 val_transform = transforms.Compose([
-    transforms.Resize(size=(896, 896), antialias=True),
+    transforms.Resize(size=(448, 448), antialias=True),
 ])
 
 def validate_model(model, val_dataloader, device, classes):
@@ -74,22 +75,19 @@ def train_model(model, cfg, train_dataloader, val_dataloader, classes):
         for idx, batch in enumerate(tqdm(train_dataloader)):
             imgs = batch["images"].to(device)
             labels = batch["labels"].to(device)
-
             outputs = model(imgs, labels=labels, output_attentions=True)
             loss = outputs["loss"]
-
-            loss.backward()
+            loss.mean().backward()
             optimizer.step()
-
             optimizer.zero_grad()
 
             with torch.no_grad():
+                
                 predicted = outputs["logits"].argmax(dim=1)
                 predicted_process = predicted[0].detach().cpu().numpy().squeeze()
-                plt.imsave("./processing_predicted.png", predicted_process)
+                plt.imsave(f"{ABS_PATH}processing_predicted.png", predicted_process)
                 # print(f"type of predictions: {predicted.detach().cpu().numpy().shape}")
                 # print(f"type of labels{labels.detach().cpu().numpy().shape}")
-        torch.cuda.empty_cache()
         miou = compute_iou(predicted, labels)
         macc = compute_mean_accuracy(predicted, labels, len(classes))
         print("Train Loss:", loss.item())
@@ -109,7 +107,7 @@ def main(cfg:DictConfig):
     elif cfg.dataset_name == "Fishency":
         train_data, val_data, classes = load_dataset_fishency(dataset_dir=cfg.dataset_dir)
         print(classes)
-        print(f"Total train samples: {len(train_data)}, val samples: {len(val_data)}")
+        print(f"Total train samples: {len(train_data)}, val samples: {len(val_data)} with {len(classes)} classes")
     dist.init_process_group(backend="NCCL")
     rank = dist.get_rank()
     print(f"Start running basic DDP on rank {rank}.")
@@ -124,16 +122,11 @@ def main(cfg:DictConfig):
     # ========================================================================
     total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"training {cfg.model_name} with {total_trainable_params} parameters")
-    split_index = int(len(list(model.named_parameters())) // 1) # freezing half of the dinov2 layers transfer learning
-    for name, param in list(model.named_parameters())[:split_index]:
-        if name.startswith("dino"):
-            param.requires_grad = False
-    total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"training {cfg.model_name} with {total_trainable_params} parameters")
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs for training.")
         model = DataParallel(model, device_ids=[0, 1])
     # ========================================================================
     train_model(model=model, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, classes=classes)
+    model.save_model_checkpoints()
 if __name__ == "__main__":
     main()
