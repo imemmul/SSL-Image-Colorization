@@ -12,7 +12,7 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
   def __init__(self, config, num_classes):
     super().__init__()
     self.config = config
-    self.dinov2 = torch.hub.load(repo_or_dir='facebookresearch/dinov2', model=f"dinov2_{config.arch_name}").cuda()
+    self.dinov2 = torch.hub.load(repo_or_dir='facebookresearch/dinov2', model=f"dinov2_{config['arch_name']}").cuda()
 
     if num_classes <= 2:
       self.num_classes = num_classes - 1
@@ -22,7 +22,7 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
       self.num_classes = num_classes
       self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
     
-    self.classifier = LinearClassifier(config.hidden_size, 32, 32, num_labels=self.num_classes)
+    self.classifier = LinearClassifier(config['hidden_size'], 32, 32, num_labels=self.num_classes)
 
   def forward(self, input, output_attentions=None, labels=None):
     # use frozen features
@@ -42,8 +42,8 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
           label_map,
           cmap="binary"
       )
-      print(f"labels shape: {labels.shape}")
-      print(f"logits shape: {logits.shape}")
+      # print(f"labels shape: {labels.shape}")
+      # print(f"logits shape: {logits.shape}")
       loss = self.loss_fn(logits.squeeze(), labels.squeeze()) # probabilty check
     return dict(
         loss=loss,
@@ -54,17 +54,17 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
       'backbone': self.dinov2.state_dict(),
       'decoder': self.classifier.state_dict()
     }
-    torch.save(checkpoint, self.config.save_folder)
+    torch.save(checkpoint, f"{self.config['save_folder']}dinov2_segmenter.pth")
 
   def capture_attention_maps(self, output):
     """
     deprecated for now
     """
     attentions = output.attn_output
-    w, h = img.shape[1] - img.shape[1] % self.config.patch_size, img.shape[2] - img.shape[2] % self.config.patch_size
+    w, h = img.shape[1] - img.shape[1] % self.config['patch_size'], img.shape[2] - img.shape[2] % self.config['patch_size']
     img = img[:, :w, :h].unsqueeze(0)
-    w_featmap = img.shape[-2] // self.config.patch_size
-    h_featmap = img.shape[-1] // self.config.patch_size
+    w_featmap = img.shape[-2] // self.config['patch_size']
+    h_featmap = img.shape[-1] // self.config['patch_size']
     nh = attentions.shape[1] # number of head
 
     # we keep only the output patch attention
@@ -75,10 +75,10 @@ class Dinov2ForSemanticSegmentation(torch.nn.Module):
     attentions[:, 283] = 0 
 
     attentions = attentions.reshape(nh, w_featmap, h_featmap)
-    attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=self.config.patch_size, mode="nearest")[0].cpu().numpy()
+    attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=self.config['patch_size'], mode="nearest")[0].cpu().numpy()
     
     for j in range(nh):
-        fname = os.path.join(self.config.attention_out, "attn-head" + str(j) + ".png")
+        fname = os.path.join(self.config['attention_out'], "attn-head" + str(j) + ".png")
         plt.imsave(fname=fname, arr=attentions[j], format='png')
         print(f"{fname} saved.")
     for hook in self.hooks:

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-class LinearClassifier(torch.nn.Module):
+class LinearClassifier(torch.nn.Module): # mask2former
     def __init__(self, in_channels, W=32, H=32, num_labels=1):
         super(LinearClassifier, self).__init__()
 

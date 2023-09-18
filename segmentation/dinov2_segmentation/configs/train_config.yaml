@@ -3,12 +3,13 @@ dataset_name: Fishency
 arch_name: "vitl14"
 batch_size: 16
 classifier: Linear
-num_workers: 1 # 2
+num_workers: 0 #-1
 model_name: facebook/dinov2-large
 learning_rate: 1e-3
-epochs: 50
+epochs: 100
 metric: mIoU
 hidden_size: 1024
 attention_out: ./attention_maps
 patch_size: 14
 save_folder : /home/doga/Projects/emir_workspace/SSL-Image-Colorization/segmentation/dinov2_segmentation/checkpoints/
+threshold : 0.5

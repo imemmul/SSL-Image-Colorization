@@ -7,7 +7,8 @@ import hydra
 from torchvision.transforms import Compose
 from PIL import Image
 import torchvision.transforms as transforms
-
+from models.dino_seg import ABS_PATH
+import matplotlib.pyplot as plt
 ADE_MEAN = np.array([123.675, 116.280, 103.530]) / 255
 ADE_STD = np.array([58.395, 57.120, 57.375]) / 255
 
@@ -44,7 +45,7 @@ class CustomDataset(Dataset):
         item = self.dataset[index]
         if self.binary_seg:
             original_image = torch.Tensor(np.array(Image.open(item['image'])))
-            original_image_map = torch.LongTensor(np.array(Image.open(item['label']).convert("L")))
+            original_image_map = torch.LongTensor(np.array(Image.open(item['label']).convert('L'))).float()
         original_image = original_image.permute(2, 0, 1)
         image = self.transform(img=original_image)
         image = self.normalization(image)
